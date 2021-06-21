@@ -132,11 +132,9 @@ namespace AppleXMLToSQLITE
         }
 
 
-        private bool updateColumnList(List<Tuple<string, string>> attributes, string table)
+        private void updateColumnList(List<Tuple<string, string>> attributes, string table)
         {
             List<string> list = getCollumns(table);
-
-            SQLiteCommand com = this.sqlConn.CreateCommand();
             for (int i = 0; i < attributes.Count; i++)
             {
                 Tuple<string, string> tup = attributes[i];
@@ -145,9 +143,6 @@ namespace AppleXMLToSQLITE
                     addColumn(tup, table);
                 }
             }
-            int count = com.ExecuteNonQuery();
-            return count > 0 ? true : false;
-
         }
 
         public bool enterRecord(List<Tuple<string, string>> attributes, string tableName)
