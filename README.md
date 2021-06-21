@@ -1,10 +1,10 @@
-# APPLE Health XML export to SQLITE
+# Apple Health XML export to SQLITE
 
 ## This project is not complete
 
 ### Overview
 
-This project converts the somewhat useless massive XML file to a slightly less useless and slightly less massive sqlite file. Please note that Metadata nodes (child nodes) in the XML file are entered into seperate tables, where they join to their parent table on rowid and parentTableName
+This project converts the somewhat useless massive XML file Apple gives you to a slightly less useless and slightly less massive sqlite file. Please note that Metadata nodes (child nodes) in the XML file are entered into seperate tables, where they join to their parent table on rowid and parentTableName
 
 ### Example SQL Queries
 
