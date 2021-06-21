@@ -7,6 +7,7 @@ using System.Collections;
 using Serilog.Core;
 using Serilog;
 using Serilog.Enrichers;
+using System.Text.RegularExpressions;
 
 namespace AppleXMLToSQLITE
 {
@@ -42,9 +43,13 @@ namespace AppleXMLToSQLITE
         {
             SQLiteCommand com = this.sqlConn.CreateCommand();
             string qry = "CREATE TABLE " + table + " ( ";
-            if (meta)
+            if (meta && attributes.Count > 0)
             {
                 qry += " FK INT, tableReference TEXT,";
+            }
+            else if(meta)
+            {
+                qry += " FK INT, tableReference TEXT";
             }
 
             for (int i = 0; i < attributes.Count; i++)
@@ -104,10 +109,10 @@ namespace AppleXMLToSQLITE
             return list;
         }
 
-        private bool addColumn(Tuple<string,string> tup, string table)
+        private bool addColumn(Tuple<string, string> tup, string table)
         {
             SQLiteCommand com = this.sqlConn.CreateCommand();
-            string qry = "ALTER " + table + " add column ";
+            string qry = "ALTER TABLE " + table + " ADD COLUMN ";
             if (tup.Item1.ToLower().Contains("date"))
             {
                 qry += tup.Item1 + " DATETIME ";
@@ -154,14 +159,14 @@ namespace AppleXMLToSQLITE
             SQLiteCommand com = this.sqlConn.CreateCommand();
             string qry = "INSERT INTO " + tableName + "( ";
             string vals = " ( ";
-            for(int i = 0; i < attributes.Count; i++)
+            for (int i = 0; i < attributes.Count; i++)
             {
                 Tuple<string, string> tup = attributes[i];
-                if(i != attributes.Count - 1)
+                if (i != attributes.Count - 1)
                 {
                     qry += tup.Item1 + ", ";
                     vals += "@" + tup.Item1 + ", ";
-                    com.Parameters.AddWithValue("@" + tup.Item1, tup.Item2);
+                    com.Parameters.AddWithValue("@" + tup.Item1, cleanInput(tup));
                 }
                 else
                 {
@@ -178,7 +183,8 @@ namespace AppleXMLToSQLITE
             {
                 count = com.ExecuteNonQuery();
                 //Logger.Information(String.Format("Entered Record into {0}", tableName));
-            }catch(Exception e)
+            }
+            catch (Exception e)
             {
                 updateColumnList(attributes, tableName);
                 com = this.sqlConn.CreateCommand();
@@ -197,26 +203,17 @@ namespace AppleXMLToSQLITE
                 createTable(attributes, metaTableName, true);
             }
             SQLiteCommand com = this.sqlConn.CreateCommand();
-            string qry = "INSERT  INTO " + metaTableName + "( FK, tableReference, ";
-            string vals = " ";
+            string qry = "INSERT  INTO " + metaTableName + "( FK, tableReference";
+            string vals = " " + fk + ", '" + tableNameReference + "'";
             for (int i = 0; i < attributes.Count; i++)
             {
                 Tuple<string, string> tup = attributes[i];
-                if (i != attributes.Count - 1)
-                {
-                    qry += tup.Item1 + ", ";
-                    vals += "@" + tup.Item1 + ", ";
-                    com.Parameters.AddWithValue("@" + tup.Item1, tup.Item2);
-                }
-                else
-                {
-                    qry += tup.Item1;
-                    vals += "@" + tup.Item1;
-                    com.Parameters.AddWithValue("@" + tup.Item1, tup.Item2);
-                }
+                qry += "," + tup.Item1;
+                vals += ", @" + tup.Item1;
+                com.Parameters.AddWithValue("@" + tup.Item1, tup.Item2);
 
             }
-            qry += " ) VALUES ( " + fk + ", '" + tableNameReference + "', " + vals + " )";
+            qry += " ) VALUES (  " + vals + " )";
             com.CommandText = qry;
             int count = 0;
             try
@@ -226,7 +223,7 @@ namespace AppleXMLToSQLITE
             }
             catch (Exception e)
             {
-                updateColumnList(attributes,metaTableName);
+                updateColumnList(attributes, metaTableName);
                 com = this.sqlConn.CreateCommand();
                 com.CommandText = qry;
                 count = com.ExecuteNonQuery();
@@ -234,6 +231,18 @@ namespace AppleXMLToSQLITE
 
 
             return count > 0 ? true : false;
+        }
+
+        public string cleanInput(Tuple<string, string> ins)
+        {
+            String outs = ins.Item2;
+            if (ins.Item1.ToLower().Contains("date"))
+            {
+                Regex regEx = new Regex("-\\d\\d\\d\\d");
+                outs = regEx.Replace(outs, "");
+
+            }
+            return outs;
         }
 
 
