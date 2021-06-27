@@ -8,6 +8,7 @@ using Serilog.Core;
 using Serilog;
 using Serilog.Enrichers;
 using System.Text.RegularExpressions;
+using System.Xml;
 
 namespace AppleXMLToSQLITE
 {
@@ -16,6 +17,10 @@ namespace AppleXMLToSQLITE
         private SQLiteConnection sqlConn;
         private List<string> tableList;
         private static Logger Logger = new LoggerConfiguration().Enrich.With(new ThreadIdEnricher()).WriteTo.Console(outputTemplate: "{Timestamp:HH:mm} [{Level}] ({ThreadId}) {Message}{NewLine}{Exception}").WriteTo.File("./logs/log").CreateLogger();
+
+        private Dictionary<string, int> tableKeyCount = new Dictionary<string, int>();
+
+        public Stack<string> tableParentNames = new Stack<string>();
 
         public Utilities(string filePath)
         {
@@ -26,6 +31,7 @@ namespace AppleXMLToSQLITE
             this.sqlConn = new SQLiteConnection("Data Source=health.db;Version=3;");
             this.sqlConn.Open();
             this.tableList = new List<string>();
+            this.createTimezoneTable();
 
         }
 
@@ -47,7 +53,7 @@ namespace AppleXMLToSQLITE
             {
                 qry += " FK INT, tableReference TEXT,";
             }
-            else if(meta)
+            else if (meta)
             {
                 qry += " FK INT, tableReference TEXT";
             }
@@ -94,6 +100,20 @@ namespace AppleXMLToSQLITE
             return count > 0 ? true : false;
 
         }
+
+
+        private bool createTimezoneTable()
+        {
+            SQLiteCommand com = this.sqlConn.CreateCommand();
+            string qry = "CREATE TABLE Timezone ( FK INT, tableReference TEXT, timezone TEXT, UNIQUE (FK, tableReference)) ";
+            com.CommandText = qry;
+            Logger.Information(String.Format("Created table Timezone"));
+            int count = com.ExecuteNonQuery();
+            this.tableList.Add("Timezone");
+            return count > 0 ? true : false;
+        }
+
+
 
         private List<string> getCollumns(string table)
         {
@@ -161,7 +181,7 @@ namespace AppleXMLToSQLITE
                 {
                     qry += tup.Item1 + ", ";
                     vals += "@" + tup.Item1 + ", ";
-                    com.Parameters.AddWithValue("@" + tup.Item1, cleanInput(tup));
+                    com.Parameters.AddWithValue("@" + tup.Item1, cleanInput(tup, tableName));
                 }
                 else
                 {
@@ -228,18 +248,107 @@ namespace AppleXMLToSQLITE
             return count > 0 ? true : false;
         }
 
-        public string cleanInput(Tuple<string, string> ins)
+        public bool enterTimezone(int fk, string tableNameReference, string timezone)
+        {
+            SQLiteCommand com = this.sqlConn.CreateCommand();
+            string qry = "INSERT  INTO Timezone ( FK, tableReference, timezone";
+            string vals = " " + fk + ", '" + tableNameReference + "', @time"; ;
+            com.Parameters.AddWithValue("@" + "time", timezone);
+            qry += " ) VALUES (  " + vals + " ) ON CONFLICT(FK, tableReference) DO UPDATE SET timezone=excluded.timezone;";
+            com.CommandText = qry;
+            int count = 0;
+            try
+            {
+                count = com.ExecuteNonQuery();
+                //Logger.Information(String.Format("Entered Record into {0}", "MetadataEntry"));
+            }
+            catch (Exception e)
+            {
+                Logger.Information("Failed to insert timezone, potentailly already exists for row/table");
+            }
+            return count > 0 ? true : false;
+        }
+
+        public string cleanInput(Tuple<string, string> ins, string tableName)
         {
             String outs = ins.Item2;
             if (ins.Item1.ToLower().Contains("date"))
             {
                 Regex regEx = new Regex("-\\d\\d\\d\\d");
-                outs = regEx.Replace(outs, "");
-
+                Match max = regEx.Match(outs);
+                if (max.Success)
+                {
+                    this.enterTimezone(tableKeyCount.GetValueOrDefault(tableName), tableName, max.Value);
+                    outs = regEx.Replace(outs, "");
+                }
             }
             return outs;
         }
 
+        public void handleXMLRecordRow(XmlReader reader)
+        {
+            List<Tuple<string, string>> attributeList = new List<Tuple<string, string>>();
+            string nodeName = reader.Name;
+            int i = 0;
+            if (nodeName == "Record")
+            {
+                reader.MoveToAttribute(0);
+                i++;
+                nodeName = reader.Value.Replace("HKQuantityTypeIdentifier", "");
+            }
+            for (; i < reader.AttributeCount; i++)
+            {
+                reader.MoveToAttribute(i);
+                attributeList.Add(new Tuple<string, string>(reader.Name, reader.GetAttribute(i).Replace("HKQuantityTypeIdentifier", "")));
+            }
+            if (attributeList.Count > 0)
+            {
+                this.enterRecord(attributeList, nodeName);
+                attributeList = new List<Tuple<string, string>>();
+                updateDict(nodeName);
+            }
+        }
+
+        public void handleXMLMetaRow(XmlReader reader)
+        {
+            List<Tuple<string, string>> attributeList = new List<Tuple<string, string>>();
+            string metaDataTableName = reader.Name;
+            for (int i = 0; i < reader.AttributeCount; i++)
+            {
+                reader.MoveToAttribute(i);
+                attributeList.Add(new Tuple<string, string>(reader.Name, reader.GetAttribute(i).Replace("HKQuantityTypeIdentifier", "")));
+            }
+            if (attributeList.Count > 0)
+            {
+                this.enterMeta(attributeList, tableKeyCount.GetValueOrDefault(tableParentNames.Peek()), tableParentNames.Peek(), metaDataTableName);
+                attributeList = new List<Tuple<string, string>>();
+            }
+            if (!reader.IsStartElement())
+            {
+                tableParentNames.Push(metaDataTableName);
+            }
+        }
+
+        public void writeDataSetToSQLITE()
+        {
+
+        }
+
+        private void updateDict(string tableName)
+        {
+
+            if (tableKeyCount.ContainsKey(tableName))
+            {
+                int count = 0;
+                tableKeyCount.Remove(tableName, out count);
+                tableKeyCount.Add(tableName, ++count);
+            }
+            else
+            {
+                tableKeyCount.Add(tableName, 0);
+            }
+
+        }
 
     }
 }

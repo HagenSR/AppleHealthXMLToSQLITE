@@ -13,13 +13,8 @@ namespace AppleXMLToSQLITE
     class Program
     {
         private static Logger Logger = new LoggerConfiguration().Enrich.With(new ThreadIdEnricher()).WriteTo.Console(outputTemplate: "{Timestamp:HH:mm} [{Level}] ({ThreadId}) {Message}{NewLine}{Exception}", restrictedToMinimumLevel: Serilog.Events.LogEventLevel.Error).MinimumLevel.Error().CreateLogger();
-        private static Dictionary<string, int> tableKeyCount = new Dictionary<string, int>();
 
         private static Utilities util = new Utilities("health.db");
-
-        private static List<Tuple<string, string>> attributeList = new List<Tuple<string, string>>();
-
-        private static Stack<string> tableParentNames = new Stack<string>();
 
         static void Main(string[] args)
         {
@@ -29,102 +24,43 @@ namespace AppleXMLToSQLITE
             XmlReader reader = XmlReader.Create(ConfigurationManager.ConnectionStrings["filePath"].ConnectionString, settings);
             reader.MoveToContent();
 
+            // Note: C#'s DataSet class does allow for the easy conversion of XML to a DataSet ( A C# Database ). However, The health export can 
+            // Become Excedingly large, requiring a large amount of RAM. This approach uses less Ram at the cost of time
+
             // Parse the file and display each of the nodes.
             while (reader.Read())
             {
                 try
                 {
                     // Single Element
-                    if (reader.IsEmptyElement && tableParentNames.Count < 1)
+                    if (reader.IsEmptyElement && util.tableParentNames.Count < 1)
                     {
-                        handleXMLRecordRow(reader);
+                        util.handleXMLRecordRow(reader);
                     }
                     // Enter record with children
-                    else if (reader.NodeType != XmlNodeType.EndElement && tableParentNames.Count < 1 && reader.NodeType != XmlNodeType.Whitespace)
+                    else if (reader.NodeType != XmlNodeType.EndElement && util.tableParentNames.Count < 1 && reader.NodeType != XmlNodeType.Whitespace)
                     {
-                        tableParentNames.Push(reader.Name);
-                        handleXMLRecordRow(reader);
+                        util.tableParentNames.Push(reader.Name);
+                        util.handleXMLRecordRow(reader);
                     }
                     //Enter meta data
                     else if(reader.NodeType != XmlNodeType.EndElement && reader.NodeType != XmlNodeType.Whitespace)
                     {
-                        handleXMLMetaRow(reader);
+                        util.handleXMLMetaRow(reader);
                     }
                     else if(reader.NodeType == XmlNodeType.EndElement)
                     {
                         // Parent node has ended, remove one parent from the list.
-                        tableParentNames.Pop();
+                        util.tableParentNames.Pop();
                     }
                 }
                 catch (Exception e)
                 {
                     // Reset to a stable state after exception
                     Logger.Error(e.Message);
-                    tableParentNames = new Stack<string>();
-                    attributeList = new List<Tuple<string, string>>();
+                    util.tableParentNames = new Stack<string>();
                 }
-
-
             }
-
-        }
-
-        public static void handleXMLRecordRow(XmlReader reader)
-        {
-            string nodeName = reader.Name;
-            int i = 0;
-            if (nodeName == "Record")
-            {
-                reader.MoveToAttribute(0);
-                i++;
-                nodeName = reader.Value.Replace("HKQuantityTypeIdentifier", "");
-            }
-            for (; i < reader.AttributeCount; i++)
-            {
-                reader.MoveToAttribute(i);
-                attributeList.Add(new Tuple<string, string>(reader.Name, reader.GetAttribute(i).Replace("HKQuantityTypeIdentifier", "")));
-            }
-            if (attributeList.Count > 0)
-            {
-                util.enterRecord(attributeList, nodeName);
-                attributeList = new List<Tuple<string, string>>();
-                updateDict(nodeName);
-            }
-        }
-
-        private static void handleXMLMetaRow(XmlReader reader)
-        {
-            string metaDataTableName = reader.Name;
-            for (int i = 0; i < reader.AttributeCount; i++)
-            {
-                reader.MoveToAttribute(i);
-                attributeList.Add(new Tuple<string, string>(reader.Name, reader.GetAttribute(i).Replace("HKQuantityTypeIdentifier", "")));
-            }
-            if (attributeList.Count > 0)
-            {
-                util.enterMeta(attributeList, tableKeyCount.GetValueOrDefault(tableParentNames.Peek()), tableParentNames.Peek(), metaDataTableName);
-                attributeList = new List<Tuple<string, string>>();
-            }
-            if (!reader.IsStartElement())
-            {
-                tableParentNames.Push(metaDataTableName);
-            }
-        }
-
-        private static void updateDict(string tableName)
-        {
-
-            if (tableKeyCount.ContainsKey(tableName))
-            {
-                int count = 0;
-                tableKeyCount.Remove(tableName, out count);
-                tableKeyCount.Add(tableName, ++count);
-            }
-            else
-            {
-                tableKeyCount.Add(tableName, 0);
-            }
-
         }
     }
 }
