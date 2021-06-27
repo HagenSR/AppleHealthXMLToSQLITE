@@ -12,9 +12,12 @@ This project converts the somewhat useless massive XML file Apple gives you to a
 
 `.schema {table}` will show the schema information for a given table
 
-`SELECT * FROM FlightsClimbed limit 10` Returns 10 records from FlightsClimbed
+```SQL 
+SELECT * FROM FlightsClimbed limit 10
+``` 
+Returns 10 records from FlightsClimbed
 
-`
+```SQL
 SELECT
     Sum(value) as FlightsClimbed,
     date(
@@ -31,14 +34,20 @@ from
     AND timezone.tableReference = 'FlightsClimbed'
 GROUP BY
     dte;
-` 
+```
 Returns the number of flights climbed on a date ( with timezone information)
 
-`SELECT MAX(value) FROM HeartRate;` Returns the highest heartrate recorded
+```SQL 
+SELECT MAX(value) FROM HeartRate; 
+``` 
+Returns the highest heartrate recorded
 
-`SELECT * FROM BodyMass JOIN MetaDataEntry on BodyMass.ROWID = MetaDataEntry.FK and MetaDataEntry.tableReference = 'BodyMass' limit 10` Will return the first 10 BodyMass entries and it's corresponding metadata
+```SQL 
+SELECT * FROM BodyMass JOIN MetaDataEntry on BodyMass.ROWID = MetaDataEntry.FK and MetaDataEntry.tableReference = 'BodyMass' limit 10
+``` 
+Will return the first 10 BodyMass entries and it's corresponding metadata
 
-`
+```SQL
 SELECT
     BodyMass.creationDate,
     BodyMass.value as Pounds,
@@ -68,11 +77,11 @@ WHERE
     AND Height.ROWID = closestDateHeight.hgtID
 ORDER BY
     BodyMass.creationDate DESC
-`
+```
 
 Will calculate BMI for every Weight record, using the closest Height record to the BodyMass's Creation date
 
-`
+```SQL
 SELECT
     sum(
         Cast (
@@ -83,7 +92,7 @@ SELECT
     ) as hoursAsleep
 FROM
     HKCategoryTypeIdentifierSleepAnalysis
-`
+```
 Will get the total number of hours your apple watch has tracked you sleeping
 
 
